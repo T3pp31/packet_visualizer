@@ -1,0 +1,31 @@
+{
+  "playback": {
+    "speeds": [0.5, 1, 2, 4],
+    "defaultSpeed": 1,
+    "minPacketAnimMs": 400,
+    "maxPacketAnimMs": 1200,
+    "idleGapCompress": true,
+    "maxIdleGapMs": 800
+  },
+  "topology": {
+    "routerLastOctets": [1, 254],
+    "multiSubnetAsRouter": true,
+    "layoutRadiusPx": 220,
+    "nodeSizePx": 56
+  },
+  "colors": {
+    "arpRequest": "#2F6FED",
+    "arpReply": "#1B9E5A",
+    "ipv4": "#C27803",
+    "link": "#8A8F98",
+    "broadcastNode": "#E5A000",
+    "background": "#F4F7FB",
+    "grid": "#D8DEE8",
+    "nodeStroke": "#3A4250",
+    "text": "#1A1F2B"
+  },
+  "ui": {
+    "locale": "ja",
+    "maxPacketListRows": 500
+  }
+}
