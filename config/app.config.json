@@ -10,7 +10,7 @@
   "topology": {
     "routerLastOctets": [1, 254],
     "multiSubnetAsRouter": true,
-    "layoutRadiusPx": 220,
+    "layoutRadiusPx": 300,
     "nodeSizePx": 56
   },
   "colors": {
