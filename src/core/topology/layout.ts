@@ -6,10 +6,15 @@ export function autoLayout(topology: Topology, config: AppConfig): Topology {
   const fixed = topology.nodes.filter((node) => node.fixed);
   const centerX = 400;
   const centerY = 300;
-  const radius = config.topology.layoutRadiusPx;
 
   const broadcast = movable.find((node) => node.id === topology.broadcastNodeId);
   const others = movable.filter((node) => node.id !== topology.broadcastNodeId);
+
+  const nodeCount = others.length;
+  const minCenterDistance = config.topology.nodeSizePx + 72;
+  const minRadius =
+    nodeCount <= 1 ? 0 : minCenterDistance / (2 * Math.sin(Math.PI / nodeCount));
+  const radius = Math.max(config.topology.layoutRadiusPx, minRadius);
 
   const positioned = others.map((node, index) => {
     const angle = (2 * Math.PI * index) / Math.max(others.length, 1) - Math.PI / 2;
