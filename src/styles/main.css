@@ -106,6 +106,7 @@ select {
 .canvas-panel {
   min-height: 480px;
   position: relative;
+  overflow: hidden;
 }
 
 #topology-canvas {
@@ -114,6 +115,77 @@ select {
   height: 100%;
   min-height: 480px;
   cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+#topology-canvas.topology-canvas--dragging {
+  cursor: grabbing;
+}
+
+.canvas-controls {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+
+.canvas-controls__button {
+  min-width: 40px;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.canvas-controls__button:hover {
+  background: #edf3ff;
+  color: var(--accent-dark);
+}
+
+.canvas-controls__button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.canvas-controls__button--fit {
+  min-width: auto;
+  border-right: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.canvas-controls__level {
+  min-width: 64px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.canvas-hint {
+  position: absolute;
+  left: 16px;
+  bottom: 12px;
+  margin: 0;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--muted);
+  font-size: 0.75rem;
+  pointer-events: none;
 }
 
 .sidebar {

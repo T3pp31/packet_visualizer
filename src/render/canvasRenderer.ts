@@ -46,6 +46,13 @@ export class CanvasRenderer {
     this.panY = panY;
   }
 
+  screenToWorld(x: number, y: number): { x: number; y: number } {
+    return {
+      x: (x - this.panX) / this.zoom,
+      y: (y - this.panY) / this.zoom,
+    };
+  }
+
   draw(topology: Topology, scene: SpriteScene): void {
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
@@ -69,8 +76,7 @@ export class CanvasRenderer {
     x: number,
     y: number,
   ): NetworkNode | null {
-    const worldX = (x - this.panX) / this.zoom;
-    const worldY = (y - this.panY) / this.zoom;
+    const { x: worldX, y: worldY } = this.screenToWorld(x, y);
     const size = this.config.topology.nodeSizePx;
     const radius = size / 2 + 8;
 
@@ -112,14 +118,18 @@ export class CanvasRenderer {
     ctx.save();
     ctx.strokeStyle = this.config.colors.grid;
     ctx.lineWidth = 1;
-    const step = 32;
-    for (let x = 0; x < width; x += step) {
+    let step = 32 * this.zoom;
+    while (step < 18) step *= 2;
+    while (step > 72) step /= 2;
+    const offsetX = ((this.panX % step) + step) % step;
+    const offsetY = ((this.panY % step) + step) % step;
+    for (let x = offsetX; x < width; x += step) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
       ctx.stroke();
     }
-    for (let y = 0; y < height; y += step) {
+    for (let y = offsetY; y < height; y += step) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
