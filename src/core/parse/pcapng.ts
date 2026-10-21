@@ -3,6 +3,7 @@ import { parseArp, summarizeArpJa } from './arp';
 import { etherTypeLabel, parseEthernet } from './ethernet';
 import { parseIpv4, summarizeIpv4Ja } from './ipv4';
 
+const BLOCK_TYPE_SHB = 0x0a0d0d0a;
 const BLOCK_TYPE_IDB = 0x00000001;
 const BLOCK_TYPE_EPB = 0x00000006;
 const LINKTYPE_ETHERNET = 1;
@@ -10,13 +11,26 @@ const OPT_ENDOFOPT = 0;
 const OPT_IF_TSRESOL = 9;
 const DEFAULT_TSRESOL = 6;
 
+const TS_FROM_RAW = 'raw';
+const TS_FROM_MICROS = 'micros';
+const TS_FROM_NANOS = 'nanos';
+
+// Timestamps are normalized to nanoseconds. To avoid recomputing BigInt powers
+// per packet, each interface precomputes how its raw counter maps to ns.
+type TsScale =
+  | { kind: typeof TS_FROM_RAW; factor: bigint }
+  | { kind: typeof TS_FROM_MICROS }
+  | { kind: typeof TS_FROM_NANOS };
+
 type InterfaceInfo = {
   linkType: number;
-  tsResol: number;
+  tsScale: TsScale;
 };
 
 type RawPacket = {
-  interfaceId: number;
+  linkType: number;
+  tsScale: TsScale;
+  tsOffsetNs: bigint;
   timestampNs: bigint;
   data: Uint8Array;
 };
@@ -29,6 +43,29 @@ function readUint16LE(view: DataView, offset: number): number {
   return view.getUint16(offset, true);
 }
 
+function pow10(exponent: number): bigint {
+  let result = 1n;
+  for (let i = 0; i < exponent; i += 1) result *= 10n;
+  return result;
+}
+
+function tsScaleForResolution(value: number): TsScale {
+  if ((value & 0x80) !== 0) {
+    const exponent = value & 0x7f;
+    return { kind: TS_FROM_RAW, factor: 1_000_000_000n / 2n ** BigInt(exponent) };
+  }
+  if (value === 6) return { kind: TS_FROM_MICROS };
+  if (value === 9) return { kind: TS_FROM_NANOS };
+  if (value < 9) return { kind: TS_FROM_RAW, factor: pow10(9 - value) };
+  return { kind: TS_FROM_RAW, factor: 1n };
+}
+
+function normalizeTimestamp(raw: bigint, scale: TsScale): bigint {
+  if (scale.kind === TS_FROM_MICROS) return raw * 1_000n;
+  if (scale.kind === TS_FROM_NANOS) return raw;
+  return raw * scale.factor;
+}
+
 function parseIdb(
   view: DataView,
   blockStart: number,
@@ -39,7 +76,7 @@ function parseIdb(
   if (blockEnd > view.byteLength) return null;
 
   const linkType = readUint16LE(view, blockStart + 8);
-  let tsResol = DEFAULT_TSRESOL;
+  let tsScale = tsScaleForResolution(DEFAULT_TSRESOL);
 
   let optOffset = blockStart + 16;
   while (optOffset + 4 <= blockEnd - 4) {
@@ -50,26 +87,18 @@ function parseIdb(
     const paddedLength = (length + 3) & ~3;
     if (valueOffset + paddedLength > blockEnd - 4) break;
     if (code === OPT_IF_TSRESOL && length >= 1) {
-      const raw = view.getUint8(valueOffset);
-      tsResol = raw & 0x80 ? raw & 0x7f : raw;
+      tsScale = tsScaleForResolution(view.getUint8(valueOffset));
     }
     optOffset = valueOffset + paddedLength;
   }
 
-  return { linkType, tsResol };
+  return { linkType, tsScale };
 }
 
-function normalizeTimestamp(raw: bigint, tsResol: number): bigint {
-  if (tsResol <= 9) {
-    return raw * 10n ** BigInt(9 - tsResol);
-  }
-  return raw / 10n ** BigInt(tsResol - 9);
-}
-
-function parseBlocks(buffer: ArrayBuffer): { interfaces: InterfaceInfo[]; packets: RawPacket[] } {
+function parseBlocks(buffer: ArrayBuffer): RawPacket[] {
   const view = new DataView(buffer);
-  const interfaces: InterfaceInfo[] = [];
   const packets: RawPacket[] = [];
+  let interfaces: InterfaceInfo[] = [];
   let offset = 0;
 
   while (offset + 12 <= view.byteLength) {
@@ -78,9 +107,12 @@ function parseBlocks(buffer: ArrayBuffer): { interfaces: InterfaceInfo[]; packet
     if (blockLength < 12) break;
     if (offset + blockLength > view.byteLength) break;
 
-    if (blockType === BLOCK_TYPE_IDB) {
-      const idb = parseIdb(view, offset, blockLength);
-      if (idb) interfaces.push(idb);
+    if (blockType === BLOCK_TYPE_SHB) {
+      // Interface IDs restart at 0 for every new section.
+      interfaces = [];
+    } else if (blockType === BLOCK_TYPE_IDB) {
+      // Keep a placeholder for invalid IDBs so later interface IDs stay aligned.
+      interfaces.push(parseIdb(view, offset, blockLength) ?? { linkType: -1, tsScale: tsScaleForResolution(DEFAULT_TSRESOL) });
     } else if (blockType === BLOCK_TYPE_EPB) {
       if (blockLength < 32) {
         offset += blockLength;
@@ -101,8 +133,10 @@ function parseBlocks(buffer: ArrayBuffer): { interfaces: InterfaceInfo[]; packet
         const data = new Uint8Array(buffer, dataOffset, capturedLen);
         const rawTs = (BigInt(timestampHigh) << 32n) | BigInt(timestampLow);
         packets.push({
-          interfaceId,
-          timestampNs: normalizeTimestamp(rawTs, iface.tsResol),
+          linkType: iface.linkType,
+          tsScale: iface.tsScale,
+          tsOffsetNs: 0n,
+          timestampNs: normalizeTimestamp(rawTs, iface.tsScale),
           data,
         });
       }
@@ -111,7 +145,7 @@ function parseBlocks(buffer: ArrayBuffer): { interfaces: InterfaceInfo[]; packet
     offset += blockLength;
   }
 
-  return { interfaces, packets };
+  return packets;
 }
 
 function toPacketEvent(
@@ -155,16 +189,24 @@ function toPacketEvent(
 }
 
 export function parsePcapng(buffer: ArrayBuffer): PacketEvent[] {
-  const { interfaces, packets } = parseBlocks(buffer);
-  if (packets.length === 0) {
+  const rawPackets = parseBlocks(buffer);
+  if (rawPackets.length === 0) {
     throw new Error('pcapng ファイルにパケットが見つかりません');
   }
 
-  const ethernetPackets = packets.filter(
-    (raw) => interfaces[raw.interfaceId]?.linkType === LINKTYPE_ETHERNET,
+  const ethernetPackets = rawPackets.filter(
+    (raw) => raw.linkType === LINKTYPE_ETHERNET,
   );
 
   if (ethernetPackets.length === 0) {
+    const hasEthernetInterface = rawPackets.some(
+      (raw) => raw.linkType === LINKTYPE_ETHERNET,
+    );
+    if (hasEthernetInterface) {
+      throw new Error(
+        'Ethernet インターフェースの解析可能なパケットがありません',
+      );
+    }
     throw new Error(
       '未対応の LinkType です: Ethernet (linktype=1) のパケットがありません',
     );

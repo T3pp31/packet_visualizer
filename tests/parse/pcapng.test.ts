@@ -30,6 +30,18 @@ function buildIdb(linkType: number, tsResol?: number): Uint8Array {
   return bytes;
 }
 
+function buildMalformedIdb(): Uint8Array {
+  const blockLength = 16;
+  const bytes = new Uint8Array(blockLength);
+  const view = new DataView(bytes.buffer);
+  writeUint32(view, 0, 0x00000001);
+  writeUint32(view, 4, blockLength);
+  writeUint16(view, 8, 1);
+  writeUint16(view, 10, 0);
+  writeUint32(view, 12, blockLength);
+  return bytes;
+}
+
 function buildEpb(
   interfaceId: number,
   timestamp: bigint,
@@ -216,6 +228,45 @@ describe('parsePcapng', () => {
     expect(events[1].timestampMs).toBe(1500);
   });
 
+  it('handles binary if_tsresol values (0x81 and 0x86)', () => {
+    const shb = buildShb();
+    const idbBinary = buildIdb(1, 0x86);
+    const ethPayload = buildEthernetArpPayload(
+      [0x02, 0x00, 0x00, 0x00, 0x00, 0x06],
+      [192, 168, 4, 1],
+      [192, 168, 4, 2],
+    );
+    const first = buildEpb(0, 64n, ethPayload);
+    const second = buildEpb(0, 128n, ethPayload);
+    const buffer = concatBlocks([shb, idbBinary, first, second]);
+
+    const events = parsePcapng(buffer);
+
+    expect(events).toHaveLength(2);
+    expect(events[0].absoluteTsNs).toBe(1_000_000_000n);
+    expect(events[1].timestampMs).toBe(1000);
+  });
+
+  it('resets interface IDs per section in multi-section pcapng', () => {
+    const shb1 = buildShb();
+    const idbSll = buildIdb(113);
+    const sllEpb = buildEpb(0, 1_000_000n, buildSllPayload());
+    const shb2 = buildShb();
+    const idbEth = buildIdb(1);
+    const ethPayload = buildEthernetArpPayload(
+      [0x02, 0x00, 0x00, 0x00, 0x00, 0x07],
+      [172, 16, 0, 1],
+      [172, 16, 0, 2],
+    );
+    const ethEpb = buildEpb(0, 2_000_000n, ethPayload);
+    const buffer = concatBlocks([shb1, idbSll, sllEpb, shb2, idbEth, ethEpb]);
+
+    const events = parsePcapng(buffer);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].arp?.senderIp).toBe('172.16.0.1');
+  });
+
   it('skips EPBs without a matching IDB and EPBs exceeding block bounds', () => {
     const shb = buildShb();
     const idb = buildIdb(1);
@@ -234,5 +285,23 @@ describe('parsePcapng', () => {
     expect(events).toHaveLength(1);
     expect(events[0].timestampMs).toBe(0);
     expect(events[0].arp?.senderIp).toBe('192.168.3.1');
+  });
+
+  it('keeps interface IDs aligned after a malformed IDB', () => {
+    const shb = buildShb();
+    const badIdb = buildMalformedIdb();
+    const idbEth = buildIdb(1);
+    const ethPayload = buildEthernetArpPayload(
+      [0x02, 0x00, 0x00, 0x00, 0x00, 0x08],
+      [192, 168, 5, 1],
+      [192, 168, 5, 2],
+    );
+    const ethEpb = buildEpb(1, 1_000_000n, ethPayload);
+    const buffer = concatBlocks([shb, badIdb, idbEth, ethEpb]);
+
+    const events = parsePcapng(buffer);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].arp?.senderIp).toBe('192.168.5.1');
   });
 });
