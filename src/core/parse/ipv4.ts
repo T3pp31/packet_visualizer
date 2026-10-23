@@ -20,10 +20,14 @@ export function parseIpv4(payload: Uint8Array): Ipv4Packet | null {
   const headerLen = ihl * 4;
   if (headerLen < 20 || payload.length < headerLen) return null;
 
+  const srcIp = formatIp(payload, 12);
+  const dstIp = formatIp(payload, 16);
+  if (!srcIp || !dstIp) return null;
+
   return {
     protocol: payload[9],
-    srcIp: formatIp(payload, 12),
-    dstIp: formatIp(payload, 16),
+    srcIp,
+    dstIp,
   };
 }
 

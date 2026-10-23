@@ -1,4 +1,7 @@
-export function formatMac(bytes: Uint8Array, offset = 0): string {
+export function formatMac(bytes: Uint8Array, offset = 0): string | null {
+  if (!Number.isInteger(offset) || offset < 0 || offset + 6 > bytes.length) {
+    return null;
+  }
   const parts: string[] = [];
   for (let i = 0; i < 6; i += 1) {
     parts.push(bytes[offset + i].toString(16).padStart(2, '0'));
@@ -6,7 +9,10 @@ export function formatMac(bytes: Uint8Array, offset = 0): string {
   return parts.join(':');
 }
 
-export function formatIp(bytes: Uint8Array, offset = 0): string {
+export function formatIp(bytes: Uint8Array, offset = 0): string | null {
+  if (!Number.isInteger(offset) || offset < 0 || offset + 4 > bytes.length) {
+    return null;
+  }
   return `${bytes[offset]}.${bytes[offset + 1]}.${bytes[offset + 2]}.${bytes[offset + 3]}`;
 }
 
