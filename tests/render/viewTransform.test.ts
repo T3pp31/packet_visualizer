@@ -54,4 +54,66 @@ describe('viewTransform', () => {
       expect(point.y).toBeLessThan(560);
     }
   });
+
+  it('fits a topology with more than 100,000 nodes without throwing', () => {
+    const count = 150_000;
+    const nodes = Array.from({ length: count }, (_, index) => ({
+      x: (index * 37) % 5000,
+      y: (index * 91) % 4000,
+    }));
+
+    const view = fitTopologyView(nodes, 1200, 800, 56);
+
+    expect(Number.isFinite(view.zoom)).toBe(true);
+    expect(Number.isFinite(view.panX)).toBe(true);
+    expect(Number.isFinite(view.panY)).toBe(true);
+    expect(view.zoom).toBeGreaterThan(0);
+  });
+
+  it('derives the same transform as a reference min/max loop on a large array', () => {
+    const nodes = Array.from({ length: 120_000 }, (_, index) => ({
+      x: Math.sin(index) * 1000,
+      y: Math.cos(index * 1.3) * 800,
+    }));
+
+    const nodeSize = 56;
+    const viewportWidth = 1024;
+    const viewportHeight = 768;
+    const viewportPadding = 40;
+    const horizontalNodePadding = nodeSize / 2 + 12;
+    const topNodePadding = nodeSize / 2 + 12;
+    const bottomNodePadding = nodeSize / 2 + 32;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const node of nodes) {
+      if (node.x < minX) minX = node.x;
+      if (node.x > maxX) maxX = node.x;
+      if (node.y < minY) minY = node.y;
+      if (node.y > maxY) maxY = node.y;
+    }
+    minX -= horizontalNodePadding;
+    maxX += horizontalNodePadding;
+    minY -= topNodePadding;
+    maxY += bottomNodePadding;
+
+    const contentWidth = Math.max(maxX - minX, 1);
+    const contentHeight = Math.max(maxY - minY, 1);
+    const availableWidth = Math.max(viewportWidth - viewportPadding * 2, 1);
+    const availableHeight = Math.max(viewportHeight - viewportPadding * 2, 1);
+    const expectedZoom = Math.min(
+      Math.max(MIN_VIEW_ZOOM, Math.min(availableWidth / contentWidth, availableHeight / contentHeight, 1)),
+      MAX_VIEW_ZOOM,
+    );
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const view = fitTopologyView(nodes, viewportWidth, viewportHeight, nodeSize);
+
+    expect(view.zoom).toBeCloseTo(expectedZoom);
+    expect(view.panX).toBeCloseTo(viewportWidth / 2 - centerX * expectedZoom);
+    expect(view.panY).toBeCloseTo(viewportHeight / 2 - centerY * expectedZoom);
+  });
 });

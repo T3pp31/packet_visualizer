@@ -51,10 +51,22 @@ export function fitTopologyView(
   const topNodePadding = nodeSize / 2 + 12;
   const bottomNodePadding = nodeSize / 2 + 32;
 
-  const minX = Math.min(...nodes.map((node) => node.x)) - horizontalNodePadding;
-  const maxX = Math.max(...nodes.map((node) => node.x)) + horizontalNodePadding;
-  const minY = Math.min(...nodes.map((node) => node.y)) - topNodePadding;
-  const maxY = Math.max(...nodes.map((node) => node.y)) + bottomNodePadding;
+  let minNodeX = Infinity;
+  let maxNodeX = -Infinity;
+  let minNodeY = Infinity;
+  let maxNodeY = -Infinity;
+
+  for (const node of nodes) {
+    if (node.x < minNodeX) minNodeX = node.x;
+    if (node.x > maxNodeX) maxNodeX = node.x;
+    if (node.y < minNodeY) minNodeY = node.y;
+    if (node.y > maxNodeY) maxNodeY = node.y;
+  }
+
+  const minX = minNodeX - horizontalNodePadding;
+  const maxX = maxNodeX + horizontalNodePadding;
+  const minY = minNodeY - topNodePadding;
+  const maxY = maxNodeY + bottomNodePadding;
 
   const contentWidth = Math.max(maxX - minX, 1);
   const contentHeight = Math.max(maxY - minY, 1);
