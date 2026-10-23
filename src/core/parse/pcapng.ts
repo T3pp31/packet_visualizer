@@ -4,6 +4,8 @@ import { etherTypeLabel, parseEthernet } from './ethernet';
 import { parseIpv4, summarizeIpv4Ja } from './ipv4';
 
 const BLOCK_TYPE_EPB = 0x00000006;
+const BLOCK_TYPE_SPB = 0x00000003;
+const BLOCK_TYPE_PB = 0x00000002;
 
 type RawPacket = {
   timestampNs: bigint;
@@ -18,24 +20,41 @@ function parseBlocks(buffer: ArrayBuffer): RawPacket[] {
   const view = new DataView(buffer);
   const packets: RawPacket[] = [];
   let offset = 0;
+  let lastTimestampNs = 0n;
 
   while (offset + 12 <= view.byteLength) {
     const blockType = readUint32LE(view, offset);
     const blockLength = readUint32LE(view, offset + 4);
-    if (blockLength < 12) break;
+    if (blockLength < 12 || offset + blockLength > view.byteLength) break;
 
-    if (blockType === BLOCK_TYPE_EPB) {
-      const interfaceId = readUint32LE(view, offset + 8);
-      void interfaceId;
-      const timestampHigh = readUint32LE(view, offset + 12);
-      const timestampLow = readUint32LE(view, offset + 16);
-      const capturedLen = readUint32LE(view, offset + 20);
-      const dataOffset = offset + 28;
-      if (dataOffset + capturedLen <= view.byteLength) {
-        const data = new Uint8Array(buffer, dataOffset, capturedLen);
-        const timestampNs =
-          (BigInt(timestampHigh) << 32n) | BigInt(timestampLow);
-        packets.push({ timestampNs, data });
+    if (blockType === BLOCK_TYPE_EPB || blockType === BLOCK_TYPE_PB) {
+      if (blockLength >= 28) {
+        const interfaceId = readUint32LE(view, offset + 8);
+        void interfaceId;
+        const timestampHigh = readUint32LE(view, offset + 12);
+        const timestampLow = readUint32LE(view, offset + 16);
+        const capturedLen = readUint32LE(view, offset + 20);
+        const dataOffset = offset + 28;
+        if (dataOffset + capturedLen <= offset + blockLength) {
+          const data = new Uint8Array(buffer, dataOffset, capturedLen);
+          const timestampNs =
+            (BigInt(timestampHigh) << 32n) | BigInt(timestampLow);
+          lastTimestampNs = timestampNs;
+          packets.push({ timestampNs, data });
+        }
+      }
+    } else if (blockType === BLOCK_TYPE_SPB) {
+      if (blockLength >= 16) {
+        const originalLength = readUint32LE(view, offset + 8);
+        const dataOffset = offset + 12;
+        const capturedLen = Math.min(
+          originalLength,
+          blockLength - 16,
+        );
+        if (dataOffset + capturedLen <= offset + blockLength) {
+          const data = new Uint8Array(buffer, dataOffset, capturedLen);
+          packets.push({ timestampNs: lastTimestampNs, data });
+        }
       }
     }
 
