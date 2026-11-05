@@ -16,6 +16,7 @@ describe('viewTransform', () => {
     };
 
     const zoomed = zoomViewAt(view, 2.5, anchor.x, anchor.y);
+    expect(zoomed.zoom).toBe(Math.min(MAX_VIEW_ZOOM, 2.5));
     const worldAfter = {
       x: (anchor.x - zoomed.panX) / zoomed.zoom,
       y: (anchor.y - zoomed.panY) / zoomed.zoom,
