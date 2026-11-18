@@ -16,6 +16,7 @@ describe('viewTransform', () => {
     };
 
     const zoomed = zoomViewAt(view, 2.5, anchor.x, anchor.y);
+    expect(zoomed.zoom).toBe(Math.min(MAX_VIEW_ZOOM, 2.5));
     const worldAfter = {
       x: (anchor.x - zoomed.panX) / zoomed.zoom,
       y: (anchor.y - zoomed.panY) / zoomed.zoom,
@@ -25,10 +26,33 @@ describe('viewTransform', () => {
     expect(worldAfter.y).toBeCloseTo(worldBefore.y);
   });
 
+  it('clamps an oversized zoom request and keeps the cursor anchor fixed', () => {
+    const view = { zoom: 1, panX: 10, panY: 5 };
+    const anchor = { x: 400, y: 300 };
+    const worldBefore = {
+      x: (anchor.x - view.panX) / view.zoom,
+      y: (anchor.y - view.panY) / view.zoom,
+    };
+
+    const zoomed = zoomViewAt(
+      view,
+      MAX_VIEW_ZOOM * 2,
+      anchor.x,
+      anchor.y,
+    );
+
+    expect(zoomed.zoom).toBe(MAX_VIEW_ZOOM);
+    expect((anchor.x - zoomed.panX) / zoomed.zoom).toBeCloseTo(worldBefore.x);
+    expect((anchor.y - zoomed.panY) / zoomed.zoom).toBeCloseTo(worldBefore.y);
+  });
+
   it('clamps zoom to the supported range', () => {
     expect(zoomViewAt({ zoom: 1, panX: 0, panY: 0 }, 0, 0, 0).zoom).toBe(
       MIN_VIEW_ZOOM,
     );
+    expect(
+      zoomViewAt({ zoom: 1, panX: 0, panY: 0 }, MIN_VIEW_ZOOM / 2, 0, 0).zoom,
+    ).toBe(MIN_VIEW_ZOOM);
     expect(zoomViewAt({ zoom: 1, panX: 0, panY: 0 }, 10, 0, 0).zoom).toBe(
       MAX_VIEW_ZOOM,
     );
