@@ -94,8 +94,8 @@ export function parsePcapng(buffer: ArrayBuffer): PacketEvent[] {
   const baseTimestampNs = rawPackets[0].timestampNs;
   const events: PacketEvent[] = [];
 
-  rawPackets.forEach((raw, index) => {
-    const event = toPacketEvent(raw, index, baseTimestampNs);
+  rawPackets.forEach((raw) => {
+    const event = toPacketEvent(raw, events.length, baseTimestampNs);
     if (event) events.push(event);
   });
 
