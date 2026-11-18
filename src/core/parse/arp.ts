@@ -23,12 +23,18 @@ export function parseArp(payload: Uint8Array): ArpPacket | null {
   const op: 'request' | 'reply' = opcode === 1 ? 'request' : opcode === 2 ? 'reply' : 'request';
   if (opcode !== 1 && opcode !== 2) return null;
 
+  const senderMac = formatMac(payload, 8);
+  const senderIp = formatIp(payload, 14);
+  const targetMac = formatMac(payload, 18);
+  const targetIp = formatIp(payload, 24);
+  if (!senderMac || !senderIp || !targetMac || !targetIp) return null;
+
   return {
     op,
-    senderMac: formatMac(payload, 8),
-    senderIp: formatIp(payload, 14),
-    targetMac: formatMac(payload, 18),
-    targetIp: formatIp(payload, 24),
+    senderMac,
+    senderIp,
+    targetMac,
+    targetIp,
   };
 }
 

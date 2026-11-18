@@ -12,9 +12,12 @@ export type EthernetFrame = {
 
 export function parseEthernet(packet: Uint8Array): EthernetFrame | null {
   if (packet.length < 14) return null;
+  const dstMac = formatMac(packet, 0);
+  const srcMac = formatMac(packet, 6);
+  if (!dstMac || !srcMac) return null;
   return {
-    dstMac: formatMac(packet, 0),
-    srcMac: formatMac(packet, 6),
+    dstMac,
+    srcMac,
     etherType: (packet[12] << 8) | packet[13],
     payload: packet.subarray(14),
   };
